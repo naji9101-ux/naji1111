@@ -1,0 +1,64 @@
+name: Prepare repaired thesis download
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/prepare-thesis-download.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out archive parts
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify and unpack the repaired project
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path, PurePosixPath
+          import hashlib
+          import io
+          import zipfile
+
+          paths = [
+              Path(".github/thesis-upload/archive.part-001"),
+              Path(".github/thesis-upload/archive.part-002"),
+              Path(".github/thesis-upload/archive.part-003"),
+          ]
+          chunks = [p.read_bytes() for p in paths]
+          assert [len(p) for p in chunks] == [9437184, 9437184, 5643330]
+          archive = b"".join(chunks)
+          assert len(archive) == 24517698
+          assert hashlib.sha256(archive).hexdigest() == "0d8a148374b4c4ed5628101f9202fce844be4bff015070a120f3201eb025ee26"
+          output = Path("download-artifact")
+          output.mkdir()
+          with zipfile.ZipFile(io.BytesIO(archive)) as z:
+              assert z.testzip() is None
+              assert len(z.infolist()) == 126
+              for entry in z.infolist():
+                  relative = PurePosixPath(entry.filename)
+                  assert not relative.is_absolute() and ".." not in relative.parts
+                  assert relative.parts[0] == "LaTeX_Thesis"
+              z.extractall(output)
+              for entry in z.infolist():
+                  assert (output / entry.filename).read_bytes() == z.read(entry)
+          pdf = output / "LaTeX_Thesis/main.pdf"
+          assert hashlib.sha256(pdf.read_bytes()).hexdigest() == "57cc66b928f3fda9b833311cd769fdcecd10b748878ab70b3fd420aab7ed3cdf"
+          print("Verified 126 project files and the final 129-page PDF.")
+          PY
+
+      - name: Upload the complete project ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: thesis_project_repaired
+          path: download-artifact/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
