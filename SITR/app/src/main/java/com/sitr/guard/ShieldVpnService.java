@@ -237,7 +237,7 @@ public class ShieldVpnService extends VpnService {
             protect(raw);
             raw.connect(new InetSocketAddress("1.1.1.1", 853), 3500);
             raw.setSoTimeout(3500);
-            SSLSocket ssl = (SSLSocket) SSLSocketFactory.getDefault()
+            SSLSocket ssl = (SSLSocket) ((SSLSocketFactory) SSLSocketFactory.getDefault())
                     .createSocket(raw, "one.one.one.one", 853, true);
             try {
                 SSLParameters parameters = ssl.getSSLParameters();
