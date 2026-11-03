@@ -1,0 +1,54 @@
+name: Build SITR Android APK
+on:
+  push:
+    branches: [sitr-android]
+    paths:
+      - 'SITR/**'
+      - '.github/workflows/sitr-release.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install Android SDK platform
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Unit tests and debug APK
+        working-directory: SITR
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - name: Prepare download
+        run: |
+          cp SITR/app/build/outputs/apk/debug/app-debug.apk SITR.apk
+          sha256sum SITR.apk
+      - name: Store APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SITR-APK
+          path: SITR.apk
+          if-no-files-found: error
+      - name: Publish APK in GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view sitr-v0.1.0 >/dev/null 2>&1; then
+            gh release upload sitr-v0.1.0 SITR.apk --clobber
+          else
+            gh release create sitr-v0.1.0 SITR.apk \
+              --target sitr-android \
+              --title "SITR 0.1.0 Android (test build)" \
+              --notes "Android 8+ test APK. DNS-domain blocking via local VPN. YouTube and Facebook in-app ads are not guaranteed to be removed. Encrypted DNS may fall back to standard DNS with an in-app warning. Requires real-device testing before relying on protection."
+          fi
